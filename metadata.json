@@ -1,0 +1,6 @@
+{
+  "name": "SIAP-Ujian: Sistem Ujian Online & Proctoring Real-Time",
+  "description": "Aplikasi Ujian Daring dengan Pengawasan Real-Time Kamera & Layar, Kunci Layar Anti-Kecurangan, Deteksi Aktivitas Mencurigakan Otomatis, dan Integrasi Google Form.",
+  "requestFramePermissions": ["camera", "microphone", "display-capture"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
