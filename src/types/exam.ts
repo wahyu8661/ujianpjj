@@ -48,6 +48,19 @@ export interface ExamConfig {
   maxViolationsAllowed: number;
   allowScreenStopToleranceSec: number;
   isExamStarted: boolean;
+  isExamOpen?: boolean;
+}
+
+export interface ExamArchive {
+  id: string;
+  createdAt: number;
+  title: string;
+  subject: string;
+  schoolName: string;
+  totalStudents: number;
+  students: StudentSession[];
+  violations: ViolationEvent[];
+  notes?: string;
 }
 
 export const ROMBEL_LIST = [

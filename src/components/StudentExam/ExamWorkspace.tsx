@@ -40,6 +40,7 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
   screenStream,
   onFinishExam,
 }) => {
+  const [liveConfig, setLiveConfig] = useState<ExamConfig>(config);
   const [violationsCount, setViolationsCount] = useState(0);
   const [violations, setViolations] = useState<ViolationEvent[]>([]);
   const [isLocked, setIsLocked] = useState(false);
@@ -114,7 +115,7 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
       }
 
       if (msg.type === 'config:updated' && msg.config) {
-        // Exam config updated by proctor
+        setLiveConfig(msg.config);
       }
     });
 
@@ -126,27 +127,31 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
   // 3. Periodic Frame Capturing & Heartbeat
   useEffect(() => {
     const captureInterval = setInterval(() => {
-      if (!canvasRef.current) return;
-      const canvas = canvasRef.current;
+      let canvas = canvasRef.current;
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+      }
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
       let cameraFrame: string | undefined = undefined;
       let screenFrame: string | undefined = undefined;
 
-      // Capture camera
-      if (cameraVideoRef.current && cameraVideoRef.current.videoWidth > 0) {
+      // Capture camera snapshot
+      const cam = cameraVideoRef.current;
+      if (cam && (cam.videoWidth > 0 || cam.readyState >= 2)) {
         canvas.width = 320;
         canvas.height = 240;
-        ctx.drawImage(cameraVideoRef.current, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(cam, 0, 0, canvas.width, canvas.height);
         cameraFrame = canvas.toDataURL('image/jpeg', 0.45);
       }
 
-      // Capture screen
-      if (screenVideoRef.current && screenVideoRef.current.videoWidth > 0) {
+      // Capture screen snapshot
+      const scr = screenVideoRef.current;
+      if (scr && (scr.videoWidth > 0 || scr.readyState >= 2)) {
         canvas.width = 480;
         canvas.height = 270;
-        ctx.drawImage(screenVideoRef.current, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(scr, 0, 0, canvas.width, canvas.height);
         screenFrame = canvas.toDataURL('image/jpeg', 0.4);
       }
 
@@ -189,10 +194,10 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
           status: isLocked ? 'locked' : violationsCount > 0 ? 'warning' : 'active',
         }),
       }).catch(() => {});
-    }, 3000);
+    }, 2500);
 
     return () => clearInterval(captureInterval);
-  }, [cameraStream, screenStream, isScreenSharing]);
+  }, [cameraStream, screenStream, isScreenSharing, student.id, isLocked, violationsCount]);
 
   // 4. Timer Countdown
   useEffect(() => {
@@ -474,6 +479,26 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
         </div>
       )}
 
+      {/* Hidden Video and Canvas Capture Elements (for streaming to Proctor) */}
+      <video
+        ref={cameraVideoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{ position: 'fixed', top: -9999, left: -9999, width: 320, height: 240, opacity: 0, pointerEvents: 'none' }}
+      />
+      <video
+        ref={screenVideoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{ position: 'fixed', top: -9999, left: -9999, width: 480, height: 270, opacity: 0, pointerEvents: 'none' }}
+      />
+      <canvas
+        ref={canvasRef}
+        style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+      />
+
       {/* Main Container: Google Form Workspace */}
       <div className="flex-1 w-full h-full relative bg-slate-950 flex flex-col">
         {/* Anti-cheat Watermark Overlay (non-intrusive) */}
@@ -481,16 +506,35 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
           SESI UJIAN #{student.id.substring(0, 8)} &bull; {student.name} &bull; {student.studentClass}
         </div>
 
-        {/* Google Form Iframe Container */}
-        <div className="w-full h-full flex-1 relative bg-white">
-          <iframe
-            src={getEmbeddedFormUrl((config.rombelFormUrls && config.rombelFormUrls[student.studentClass]) || config.formUrl)}
-            title={`Google Form Ujian - ${student.studentClass}`}
-            className="w-full h-full border-none"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-            loading="eager"
-          />
-        </div>
+        {/* If Proctor has closed Exam Access */}
+        {liveConfig.isExamOpen === false ? (
+          <div className="w-full h-full flex-1 flex flex-col items-center justify-center bg-slate-950 p-6 text-center z-20">
+            <div className="w-16 h-16 rounded-3xl bg-red-500/10 text-red-400 border border-red-500/30 flex items-center justify-center mb-4 animate-pulse">
+              <Lock className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl sm:text-2xl font-black text-white">
+              Akses Lembar Soal Ujian Sedang Ditutup
+            </h3>
+            <p className="text-sm text-slate-400 max-w-md mt-2 leading-relaxed">
+              Pengawas sedang menonaktifkan akses lembar Google Form ujian untuk sementara waktu. Harap tetap tenang di tempat dan menunggu instruksi pengawas untuk membuka kembali lembar soal.
+            </p>
+            <div className="mt-6 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span>Pengawasan kamera dan sesi Anda tetap berjalan aman.</span>
+            </div>
+          </div>
+        ) : (
+          /* Google Form Iframe Container */
+          <div className="w-full h-full flex-1 relative bg-white">
+            <iframe
+              src={getEmbeddedFormUrl((liveConfig.rombelFormUrls && liveConfig.rombelFormUrls[student.studentClass]) || liveConfig.formUrl)}
+              title={`Google Form Ujian - ${student.studentClass}`}
+              className="w-full h-full border-none"
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+              loading="eager"
+            />
+          </div>
+        )}
       </div>
 
       {/* Floating Picture-In-Picture Webcam HUD for Student */}

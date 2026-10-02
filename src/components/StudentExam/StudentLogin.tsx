@@ -156,6 +156,16 @@ export const StudentLogin: React.FC<StudentLoginProps> = ({ config, onSubmit }) 
             </span>
           </div>
 
+          {/* Closed Exam Notice if closed */}
+          {config.isExamOpen === false && (
+            <div className="p-3 bg-red-950/60 border border-red-500/40 rounded-xl flex items-center gap-2.5 text-xs text-red-300">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+              <span>
+                <strong>Status Akses:</strong> Lembar soal ujian saat ini sedang ditutup sementara oleh pengawas. Anda dapat melanjutkan verifikasi perangkat terlebih dahulu.
+              </span>
+            </div>
+          )}
+
           {/* Submit button */}
           <button
             type="submit"
