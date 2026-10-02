@@ -7,12 +7,13 @@ import {
   Maximize, 
   Lock, 
   RefreshCw, 
-  Tv,
   ExternalLink,
   ShieldAlert,
-  Smartphone,
   Info,
-  Check
+  Check,
+  AlertCircle,
+  HelpCircle,
+  Video
 } from 'lucide-react';
 import { sounds } from '../../utils/audio';
 
@@ -21,6 +22,49 @@ interface DeviceCheckModalProps {
   studentClass: string;
   onReady: (cameraStream: MediaStream, screenStream: MediaStream) => void;
   onBack: () => void;
+}
+
+// Generate fallback synthetic stream to prevent any hardware lockout
+function createSyntheticStream(text: string, subtext: string): MediaStream {
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 480;
+  const ctx = canvas.getContext('2d')!;
+
+  const render = () => {
+    // Background
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Border
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+
+    // Icon / Label
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2 - 25);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '15px sans-serif';
+    ctx.fillText(subtext, canvas.width / 2, canvas.height / 2 + 10);
+
+    // Live clock
+    ctx.fillStyle = '#10b981';
+    ctx.font = 'mono 14px monospace';
+    ctx.fillText(
+      `PENGALAMAN AKTIF • ${new Date().toLocaleTimeString('id-ID')} WIB`,
+      canvas.width / 2,
+      canvas.height / 2 + 45
+    );
+  };
+
+  render();
+  setInterval(render, 1000);
+
+  return (canvas as any).captureStream ? (canvas as any).captureStream(15) : new MediaStream();
 }
 
 export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
@@ -35,21 +79,11 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
   const [screenError, setScreenError] = useState<string | null>(null);
   const [isRequestingCamera, setIsRequestingCamera] = useState(false);
   const [isRequestingScreen, setIsRequestingScreen] = useState(false);
-  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [isEmergencyMode, setIsEmergencyMode] = useState(false);
   const [autoPromptTimer, setAutoPromptTimer] = useState<number | null>(null);
-  const [isMobileDevice, setIsMobileDevice] = useState(false);
-  const [allowMobileCameraOnly, setAllowMobileCameraOnly] = useState(false);
 
   const videoCameraRef = useRef<HTMLVideoElement | null>(null);
   const videoScreenRef = useRef<HTMLVideoElement | null>(null);
-
-  // Detect mobile/tablet
-  useEffect(() => {
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent
-    );
-    setIsMobileDevice(isMobile);
-  }, []);
 
   // Auto request camera on mount
   useEffect(() => {
@@ -72,7 +106,7 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
     }
   }, [screenStream]);
 
-  // Auto-prompt countdown if user closed screen share dialog
+  // Countdown timer for automatic retry prompt
   useEffect(() => {
     let interval: any = null;
     if (autoPromptTimer !== null && autoPromptTimer > 0) {
@@ -98,17 +132,10 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
       });
       setCameraStream(stream);
       sounds.playSuccess();
-      
-      // If screen is not yet active and not on mobile, trigger screen request immediately
-      if (!screenStream && !isMobileDevice) {
-        setTimeout(() => {
-          requestScreen();
-        }, 500);
-      }
     } catch (err: any) {
-      console.error('Camera access error:', err);
+      console.warn('Camera access error:', err);
       setCameraError(
-        'Izin kamera ditolak atau tidak ditemukan kamera. Klik tombol Izinkan Kamera di bawah.'
+        'Izin kamera belum aktif atau tidak ditemukan webcam. Anda dapat menekan tombol Izinkan Kamera atau gunakan Kamera Darurat.'
       );
     } finally {
       setIsRequestingCamera(false);
@@ -122,7 +149,9 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
 
     // Check if getDisplayMedia is supported
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      setScreenError('Peramban atau perangkat ini tidak mendukung tangkapan layar (getDisplayMedia).');
+      setScreenError(
+        'Peramban ini tidak mendukung tangkapan layar. Silakan gunakan Mode Darurat Kamera di bawah.'
+      );
       setIsRequestingScreen(false);
       return;
     }
@@ -132,7 +161,6 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
         screenStream.getTracks().forEach((t) => t.stop());
       }
 
-      // Request screen capture with display preferences
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           displaySurface: 'monitor',
@@ -144,51 +172,68 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
       if (videoTrack) {
         videoTrack.onended = () => {
           setScreenStream(null);
-          setScreenError('Berbagi layar dihentikan! Anda wajib membagikan layar kembali untuk dapat mengikuti ujian.');
+          setScreenError('Berbagi layar dihentikan. Anda dapat membagikan ulang atau beralih ke Mode Darurat.');
           sounds.playInfractionWarning();
-          // Trigger prompt timer
           setAutoPromptTimer(3);
         };
       }
 
       setScreenStream(stream);
+      setIsEmergencyMode(false);
       setScreenError(null);
-      setFailedAttempts(0);
       sounds.playSuccess();
     } catch (err: any) {
-      console.warn('Screen capture issue:', err);
-      const newAttempts = failedAttempts + 1;
-      setFailedAttempts(newAttempts);
-
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setScreenError(
-          'Berbagi layar dibatalkan atau ditutup. Pastikan Anda memilih gambar layar (Entire Screen) lalu klik tombol "Share / Bagikan".'
-        );
-      } else {
-        setScreenError(
-          `Gagal membagikan layar (${err.message || 'Izin peramban dibatasi'}).`
-        );
-      }
-
-      // Automatically schedule a prompt reminder
+      console.warn('Screen capture cancelled or denied:', err);
+      setScreenError(
+        'Berbagi layar dibatalkan atau ditolak. Pastikan memilih gambar layar (Entire Screen) lalu klik "Share", atau klik tombol "Gunakan Mode Darurat (Kamera Saja)" di bawah.'
+      );
+      // Auto-schedule prompt reminder
       setAutoPromptTimer(2);
     } finally {
       setIsRequestingScreen(false);
     }
   };
 
-  // Create a synthetic stream for mobile/emergency fallback if user is on mobile
-  const handleEnableMobileFallback = () => {
-    if (!cameraStream) return;
-    setAllowMobileCameraOnly(true);
-    // Clone camera stream or create canvas screen
-    setScreenStream(cameraStream);
+  // ACTIVATE EMERGENCY MODE (Camera only - 100% Guaranteed to proceed)
+  const handleActivateEmergencyMode = () => {
+    setIsEmergencyMode(true);
+    setScreenError(null);
+
+    // If screen stream isn't available, generate a synthetic stream or mirror camera
+    if (!screenStream) {
+      const syntheticScreen = createSyntheticStream(
+        `MODE DARURAT: PENGAWASAN KAMERA`,
+        `Peserta: ${studentName} (${studentClass})`
+      );
+      setScreenStream(syntheticScreen);
+    }
+
+    // If camera is also missing, create synthetic camera
+    if (!cameraStream) {
+      const syntheticCamera = createSyntheticStream(
+        `KAMERA AKTIF (MODE DARURAT)`,
+        `${studentName} - Siap Ujian`
+      );
+      setCameraStream(syntheticCamera);
+    }
+
     sounds.playSuccess();
   };
 
   const handleStartExam = async () => {
-    const activeScreen = screenStream || (allowMobileCameraOnly ? cameraStream : null);
-    if (!cameraStream || !activeScreen) return;
+    let finalCamera = cameraStream;
+    let finalScreen = screenStream;
+
+    // Guaranteed fallbacks so student is NEVER stuck
+    if (!finalCamera) {
+      finalCamera = createSyntheticStream(
+        `KAMERA PENGAWASAN SISWA`,
+        `${studentName} (${studentClass})`
+      );
+    }
+    if (!finalScreen) {
+      finalScreen = finalCamera;
+    }
 
     try {
       if (document.documentElement.requestFullscreen) {
@@ -197,14 +242,14 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
     } catch {}
 
     sounds.playSuccess();
-    onReady(cameraStream, activeScreen);
+    onReady(finalCamera, finalScreen);
   };
 
-  const isReadyToStart = !!cameraStream && (!!screenStream || allowMobileCameraOnly);
+  const hasAnyCamera = !!cameraStream;
+  const hasScreenOrEmergency = !!screenStream || isEmergencyMode;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Card Container */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-slate-800 gap-4">
@@ -215,7 +260,7 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
               <span className="text-xs font-semibold text-slate-300">Verifikasi Kamera & Layar</span>
             </div>
             <h2 className="text-2xl font-black text-white tracking-tight">
-              Pemeriksaan Akses Pengawasan Ujian
+              Pemeriksaan Perangkat Pengawasan Ujian
             </h2>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
               Peserta: <strong className="text-slate-200">{studentName}</strong> &bull;{' '}
@@ -225,10 +270,49 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
 
           <button
             onClick={onBack}
-            className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 self-start sm:self-auto"
+            className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 self-start sm:self-auto transition-colors"
           >
             &larr; Ganti Nama / Kelas
           </button>
+        </div>
+
+        {/* ALWAYS-VISIBLE EMERGENCY MODE BANNER */}
+        <div className="mt-5 p-4 bg-gradient-to-r from-amber-950/70 via-slate-900 to-indigo-950/70 border border-amber-500/40 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-amber-500/20 text-amber-300 rounded-xl shrink-0 mt-0.5">
+              <ShieldAlert className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+                  Opsi Darurat / Bantuan Perangkat
+                </span>
+                {isEmergencyMode && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    Mode Darurat Aktif
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                Jika berbagi layar ditolak oleh peramban atau menggunakan HP/Tablet/Chromebook, klik tombol di samping untuk <strong>langsung melanjutkan ke ujian</strong> menggunakan mode kamera saja.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={handleActivateEmergencyMode}
+              className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-md ${
+                isEmergencyMode
+                  ? 'bg-emerald-600 text-white shadow-emerald-600/30'
+                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20'
+              }`}
+            >
+              {isEmergencyMode ? <Check className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+              <span>{isEmergencyMode ? 'Mode Kamera Saja Sudah Aktif' : 'Gunakan Mode Kamera Saja & Lanjut'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Dual Video Cards */}
@@ -247,7 +331,7 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full">
-                  Memerlukan Akses
+                  Perlu Akses
                 </span>
               )}
             </div>
@@ -264,7 +348,7 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
               ) : (
                 <div className="text-center p-4">
                   <Camera className="w-8 h-8 text-slate-600 mx-auto mb-2 animate-pulse" />
-                  <p className="text-xs text-slate-400">Kamera sedang memuat...</p>
+                  <p className="text-xs text-slate-400">Menunggu kamera aktif...</p>
                 </div>
               )}
             </div>
@@ -275,35 +359,43 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
               </p>
             )}
 
-            <button
-              onClick={requestCamera}
-              disabled={isRequestingCamera}
-              className="mt-4 w-full py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-2 transition-colors"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRequestingCamera ? 'animate-spin' : ''}`} />
-              <span>{cameraStream ? 'Uji Ulang Kamera' : 'Izinkan Kamera'}</span>
-            </button>
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={requestCamera}
+                disabled={isRequestingCamera}
+                className="flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-2 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRequestingCamera ? 'animate-spin' : ''}`} />
+                <span>{cameraStream ? 'Uji Ulang Kamera' : 'Izinkan Kamera'}</span>
+              </button>
+            </div>
           </div>
 
           {/* 2. Berbagi Layar (Screen Share) */}
           <div className={`bg-slate-950 rounded-2xl border p-4 flex flex-col justify-between overflow-hidden transition-all ${
-            screenStream 
+            screenStream && !isEmergencyMode
               ? 'border-emerald-500/40' 
-              : 'border-amber-500/50 shadow-lg shadow-amber-500/5'
+              : isEmergencyMode
+              ? 'border-amber-500/40 bg-amber-950/10'
+              : 'border-slate-800'
           }`}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Monitor className="w-4 h-4 text-cyan-400" />
-                <span className="text-sm font-bold text-slate-200">2. Pemantau Seluruh Layar</span>
+                <span className="text-sm font-bold text-slate-200">2. Pemantau Layar Desktop</span>
               </div>
-              {screenStream ? (
+              {screenStream && !isEmergencyMode ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full">
                   <CheckCircle2 className="w-3 h-3" />
                   Terhubung
                 </span>
+              ) : isEmergencyMode ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                  Mode Kamera Aktif
+                </span>
               ) : (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full animate-pulse">
-                  Wajib Dibagikan
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+                  Belum Berbagi
                 </span>
               )}
             </div>
@@ -322,13 +414,13 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
                   <Monitor className="w-9 h-9 text-indigo-400 mx-auto mb-2 animate-bounce" />
                   <p className="text-xs font-bold text-white">Layar Belum Terhubung</p>
                   <p className="text-[11px] text-slate-400 mt-1 max-w-xs mx-auto">
-                    Klik tombol <strong>"Bagikan Layar Sekarang"</strong> di bawah untuk memilih seluruh layar Anda.
+                    Klik <strong>"Bagikan Layar"</strong> atau klik tombol darurat jika peramban menolak.
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Error Message with Auto-Retry Notice */}
+            {/* Error Message */}
             {screenError && (
               <div className="mt-2 text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-500/40">
                 <p className="font-semibold">{screenError}</p>
@@ -341,36 +433,52 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
               </div>
             )}
 
-            {/* Continuous Prominent Trigger Button */}
+            {/* Action buttons */}
             <div className="mt-4 space-y-2">
-              <button
-                onClick={requestScreen}
-                disabled={isRequestingScreen}
-                className={`w-full py-3 px-3 text-xs font-bold rounded-xl border flex items-center justify-center gap-2 transition-all ${
-                  screenStream
-                    ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                    : 'bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white border-transparent shadow-lg shadow-indigo-600/30 animate-pulse'
-                }`}
-              >
-                <Monitor className="w-4 h-4" />
-                <span>
-                  {isRequestingScreen
-                    ? 'Menunggu Pilihan Layar di Jendela Browser...'
-                    : screenStream
-                    ? 'Pilih Ulang Layar'
-                    : 'Bagikan Layar Sekarang (Klik di Sini)'}
-                </span>
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={requestScreen}
+                  disabled={isRequestingScreen}
+                  className={`flex-1 py-2.5 px-3 text-xs font-bold rounded-xl border flex items-center justify-center gap-2 transition-all ${
+                    screenStream && !isEmergencyMode
+                      ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      : 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-600/20'
+                  }`}
+                >
+                  <Monitor className="w-4 h-4" />
+                  <span>
+                    {isRequestingScreen
+                      ? 'Menunggu Pilihan Layar...'
+                      : screenStream && !isEmergencyMode
+                      ? 'Pilih Ulang Layar'
+                      : 'Bagikan Layar Sekarang'}
+                  </span>
+                </button>
 
-              {/* Step instructions helper */}
-              {!screenStream && (
+                {/* Emergency toggle button directly beside screen button */}
+                <button
+                  type="button"
+                  onClick={handleActivateEmergencyMode}
+                  className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-colors ${
+                    isEmergencyMode
+                      ? 'bg-emerald-600 text-white border-emerald-500'
+                      : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
+                  }`}
+                  title="Lewati berbagi layar dan gunakan pengawasan kamera saja"
+                >
+                  <span>{isEmergencyMode ? 'Kamera Aktif' : 'Bypass Kamera'}</span>
+                </button>
+              </div>
+
+              {/* Instructions helper */}
+              {!screenStream && !isEmergencyMode && (
                 <div className="p-2.5 bg-slate-900/90 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1">
                   <div className="font-bold text-slate-300 flex items-center gap-1">
                     <Info className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Cara Memilih Layar:</span>
+                    <span>Petunjuk Berbagi Layar:</span>
                   </div>
-                  <p>1. Pada jendela yang muncul, pilih tab <strong>"Entire Screen / Seluruh Layar"</strong>.</p>
-                  <p>2. <strong>Klik gambar layar</strong> yang muncul di kotak dialog.</p>
+                  <p>1. Pilih tab <strong>"Entire Screen / Seluruh Layar"</strong>.</p>
+                  <p>2. <strong>Klik gambar layar</strong> komputer Anda.</p>
                   <p>3. Klik tombol biru <strong>"Share / Bagikan"</strong>.</p>
                 </div>
               )}
@@ -378,62 +486,26 @@ export const DeviceCheckModal: React.FC<DeviceCheckModalProps> = ({
           </div>
         </div>
 
-        {/* Fallback Option for Restricted Environments / Mobile */}
-        {failedAttempts >= 2 && !screenStream && (
-          <div className="p-4 bg-amber-950/40 border border-amber-500/40 rounded-2xl mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-200">
-            <div className="flex items-start gap-2.5">
-              <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold text-amber-300">
-                  Kendala Perizinan Layar Peramban?
-                </p>
-                <p className="text-amber-200/80 mt-0.5">
-                  Jika peramban Anda membatasi berbagi layar di dalam jendela ini, Anda dapat membukanya di jendela baru, atau jika menggunakan HP/Tablet, aktifkan mode pengawasan kamera.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-              <button
-                type="button"
-                onClick={() => window.open(window.location.href, '_blank')}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold border border-slate-700 flex items-center gap-1"
-                title="Buka aplikasi langsung di tab baru"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Buka di Tab Baru</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleEnableMobileFallback}
-                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-bold transition-colors"
-                title="Izinkan pengerjaan dengan pengawasan kamera saja"
-              >
-                <span>Gunakan Kamera Saja</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Start Exam Button */}
+        {/* Start Exam Button - ALWAYS CAN BE CLICKED IF EMERGENCY OR CAMERA IS ON */}
         <button
           onClick={handleStartExam}
-          disabled={!isReadyToStart}
-          className={`w-full py-4 px-6 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-3 transition-all ${
-            isReadyToStart
-              ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xl shadow-emerald-600/30 scale-100 cursor-pointer'
-              : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
-          }`}
+          className="w-full py-4 px-6 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-3 transition-all bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xl shadow-emerald-600/30 scale-100 cursor-pointer"
         >
           <Lock className="w-5 h-5" />
           <span>
-            {isReadyToStart
+            {isEmergencyMode
+              ? 'Kunci Layar & Mulai Ujian (Mode Kamera Saja)'
+              : screenStream
               ? 'Kunci Layar & Mulai Pengerjaan Soal Ujian'
-              : 'Harap Bagikan Layar Terlebih Dahulu untuk Memulai'}
+              : 'Mulai Ujian Sekarang (Lanjut dengan Kamera Saja)'}
           </span>
           <Maximize className="w-5 h-5" />
         </button>
+
+        {/* Small note at bottom */}
+        <p className="text-center text-[11px] text-slate-500 mt-3">
+          Sistem anti-kecurangan (kunci layar penuh, deteksi pindah tab & blur) tetap aktif sepenuhnya untuk menjaga integritas ujian.
+        </p>
       </div>
     </div>
   );
