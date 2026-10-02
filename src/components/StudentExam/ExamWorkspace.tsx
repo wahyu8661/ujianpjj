@@ -156,6 +156,17 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
           cameraFrame,
           screenFrame,
         });
+
+        // Backup HTTP stream push
+        fetch('/api/students/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: student.id,
+            cameraFrame,
+            screenFrame,
+          }),
+        }).catch(() => {});
       }
 
       // Telemetry heartbeat
@@ -165,6 +176,19 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
         screenSharingActive: screenStream?.active && screenStream.getVideoTracks().length > 0 && isScreenSharing,
         fullscreenActive: !!document.fullscreenElement,
       });
+
+      // Backup HTTP heartbeat
+      fetch('/api/students/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: student.id,
+          cameraActive: cameraStream?.active && cameraStream.getVideoTracks().length > 0,
+          screenSharingActive: screenStream?.active && screenStream.getVideoTracks().length > 0 && isScreenSharing,
+          fullscreenActive: !!document.fullscreenElement,
+          status: isLocked ? 'locked' : violationsCount > 0 ? 'warning' : 'active',
+        }),
+      }).catch(() => {});
     }, 3000);
 
     return () => clearInterval(captureInterval);

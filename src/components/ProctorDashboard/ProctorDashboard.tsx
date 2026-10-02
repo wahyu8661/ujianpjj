@@ -52,17 +52,51 @@ export const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
   const [showPrintReport, setShowPrintReport] = useState(false);
   const [showViolationsDrawer, setShowViolationsDrawer] = useState(false);
 
-  // Initialize socket listener for proctoring
-  useEffect(() => {
-    socketClient.connect('proctor');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-    // Fetch initial REST data as backup
+  // Helper to fetch latest data via REST
+  const fetchLatestStudents = () => {
     fetch('/api/students')
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) setStudents(data);
+        if (Array.isArray(data)) {
+          setStudents((prev) => {
+            const map = new Map(prev.map((s) => [s.id, s]));
+            data.forEach((s) => {
+              const old = map.get(s.id);
+              map.set(s.id, {
+                ...s,
+                cameraFrame: s.cameraFrame || old?.cameraFrame,
+                screenFrame: s.screenFrame || old?.screenFrame,
+              });
+            });
+            return Array.from(map.values());
+          });
+        }
       })
       .catch(() => {});
+  };
+
+  const handleManualRefresh = () => {
+    setIsRefreshing(true);
+    fetchLatestStudents();
+    fetch('/api/violations')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setViolations(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        setTimeout(() => setIsRefreshing(false), 600);
+      });
+  };
+
+  // Initialize socket listener for proctoring + periodic live polling
+  useEffect(() => {
+    socketClient.connect('proctor');
+
+    // Fetch initial REST data
+    fetchLatestStudents();
 
     fetch('/api/violations')
       .then((res) => res.json())
@@ -70,6 +104,11 @@ export const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
         if (Array.isArray(data)) setViolations(data);
       })
       .catch(() => {});
+
+    // Periodic live sync poll every 2.5 seconds (ensures 100% reliability even if WS reconnects)
+    const pollInterval = setInterval(() => {
+      fetchLatestStudents();
+    }, 2500);
 
     // Subscribe to real-time events
     const unsubscribe = socketClient.subscribe((msg: any) => {
@@ -152,7 +191,6 @@ export const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
         setActiveToast(v);
         sounds.playSuspiciousAlert();
 
-        // Update student violation counter and status
         if (msg.student) {
           setStudents((prev) => {
             const index = prev.findIndex((s) => s.id === msg.student.id);
@@ -169,6 +207,7 @@ export const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
 
     return () => {
       unsubscribe();
+      clearInterval(pollInterval);
     };
   }, []);
 
@@ -188,8 +227,11 @@ export const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
   });
 
   // Calculate statistics
+  const now = Date.now();
   const totalStudents = students.length;
-  const activeStudents = students.filter((s) => s.status === 'active').length;
+  const activeStudents = students.filter(
+    (s) => s.status === 'active' || (s.status !== 'locked' && s.status !== 'submitted' && now - s.lastHeartbeat < 90000)
+  ).length;
   const warningStudents = students.filter((s) => s.status === 'warning').length;
   const lockedStudents = students.filter((s) => s.status === 'locked').length;
 
@@ -286,6 +328,15 @@ export const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
 
         {/* Action Buttons Header */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleManualRefresh}
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+            title="Segarkan Data Peserta Terbaru"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Segarkan</span>
+          </button>
+
           <button
             onClick={() => setShowSettings(true)}
             className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"

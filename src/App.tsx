@@ -110,10 +110,21 @@ export default function App() {
     subject: string;
   }) => {
     const studentId = 'std_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
-    setStudentData({
+    const studentInfo = {
       id: studentId,
       ...data,
-    });
+    };
+    setStudentData(studentInfo);
+
+    // Register immediately with backend server via REST
+    fetch('/api/students/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(studentInfo),
+    }).catch(() => {});
+
+    // Also connect and register via WebSocket
+    socketClient.connect('student', studentInfo);
     setStudentStep('device_check');
   };
 

@@ -294,25 +294,23 @@ wss.on('connection', (ws: WebSocket) => {
 
   ws.on('close', () => {
     clients.delete(clientInfo);
-    if (clientInfo.studentId) {
-      const student = students.get(clientInfo.studentId);
-      if (student) {
-        student.status = 'offline';
-        broadcastToProctors({
-          type: 'student:updated',
-          student,
-        });
-      }
-    }
+    // Do NOT immediately mark student offline on websocket disconnect/refresh;
+    // give them a generous grace period for reconnections
   });
 });
 
-// Periodic check for offline students
+// Periodic check for offline students (90 seconds timeout)
 setInterval(() => {
   const now = Date.now();
   for (const [, student] of students) {
+    // Keep demo examinees alive for testing
+    if (student.id.startsWith('demo-std-')) {
+      student.lastHeartbeat = now;
+      continue;
+    }
+
     if (student.status !== 'offline' && student.status !== 'submitted') {
-      if (now - student.lastHeartbeat > 20000) {
+      if (now - student.lastHeartbeat > 90000) {
         student.status = 'offline';
         broadcastToProctors({
           type: 'student:updated',
@@ -339,6 +337,91 @@ app.post('/api/config', (req, res) => {
 
 app.get('/api/students', (_req, res) => {
   res.json(Array.from(students.values()));
+});
+
+// HTTP Student Registration
+app.post('/api/students/register', (req, res) => {
+  const { id, name, studentClass, subject } = req.body;
+  if (!id || !name) {
+    return res.status(400).json({ error: 'Missing student id or name' });
+  }
+
+  const existing = students.get(id) || {
+    id,
+    name,
+    studentClass: studentClass || 'Umum',
+    subject: subject || examConfig.subject,
+    status: 'active' as const,
+    joinedAt: Date.now(),
+    lastHeartbeat: Date.now(),
+    violationsCount: 0,
+    violations: [],
+    screenSharingActive: true,
+    cameraActive: true,
+    fullscreenActive: true,
+  };
+
+  existing.status = 'active';
+  existing.lastHeartbeat = Date.now();
+  existing.name = name;
+  if (studentClass) existing.studentClass = studentClass;
+  students.set(id, existing);
+
+  broadcastToProctors({
+    type: 'student:updated',
+    student: existing,
+  });
+
+  res.json({ success: true, student: existing });
+});
+
+// HTTP Student Heartbeat
+app.post('/api/students/heartbeat', (req, res) => {
+  const { id, cameraActive, screenSharingActive, fullscreenActive, status } = req.body;
+  if (!id) return res.status(400).json({ error: 'Missing id' });
+
+  const student = students.get(id);
+  if (student) {
+    student.lastHeartbeat = Date.now();
+    if (status && status !== 'offline') student.status = status;
+    if (cameraActive !== undefined) student.cameraActive = cameraActive;
+    if (screenSharingActive !== undefined) student.screenSharingActive = screenSharingActive;
+    if (fullscreenActive !== undefined) student.fullscreenActive = fullscreenActive;
+
+    broadcastToProctors({
+      type: 'student:telemetry',
+      studentId: student.id,
+      lastHeartbeat: student.lastHeartbeat,
+      cameraActive: student.cameraActive,
+      screenSharingActive: student.screenSharingActive,
+      fullscreenActive: student.fullscreenActive,
+      status: student.status,
+    });
+  }
+
+  res.json({ success: true });
+});
+
+// HTTP Student Stream Frame (camera & screen snapshots)
+app.post('/api/students/stream', (req, res) => {
+  const { id, cameraFrame, screenFrame } = req.body;
+  if (!id) return res.status(400).json({ error: 'Missing id' });
+
+  const student = students.get(id);
+  if (student) {
+    student.lastHeartbeat = Date.now();
+    if (cameraFrame) student.cameraFrame = cameraFrame;
+    if (screenFrame) student.screenFrame = screenFrame;
+
+    broadcastToProctors({
+      type: 'student:stream_frame',
+      studentId: student.id,
+      cameraFrame,
+      screenFrame,
+    });
+  }
+
+  res.json({ success: true });
 });
 
 app.get('/api/violations', (_req, res) => {
