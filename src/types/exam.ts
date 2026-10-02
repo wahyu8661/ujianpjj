@@ -43,16 +43,31 @@ export interface ExamConfig {
   subject: string;
   schoolName: string;
   formUrl: string;
+  rombelFormUrls?: Record<string, string>;
   durationMinutes: number;
   maxViolationsAllowed: number;
   allowScreenStopToleranceSec: number;
   isExamStarted: boolean;
 }
 
+export const ROMBEL_LIST = [
+  'Rombel VII-Abu Bakar As Shiddiq (VII Ikhwan)',
+  'Rombel VII-Fatimah binti Muhammad (VII Akhwat)',
+  'Rombel VIII - Maryam binti Imron (VIII Akhwat A)',
+  'Rombel VIII-Ruqayyah binti Muhammad (VIII Akhwat B)',
+  'Rombel VIII - Umar bin Khattab (VIII Ikhwan)',
+  'Rombel IX-Utsman bin Affan (IX Ikhwan)',
+  'Rombel IX-Khadijah binti Khuwailid (IX Akhwat)',
+  'Rombel X-Aisyah binti Abu Bakar (X Akhwat)',
+  'Rombel X-Ali bin Abi Thalib (X Ikhwan)',
+  'Rombel XI-Sumayyah binti Khubbath (XI Akhwat)',
+  'Rombel XI-Thalhah bin Ubaidillah (XI Ikhwan)',
+  'Rombel XII-Sa\'ad bin Abi Waqqash (XII Ikhwan)',
+  'Rombel XII-Hafshah binti Umar (XII Akhwat)',
+];
+
 export const CLASS_OPTIONS = [
-  'VII-A', 'VII-B', 'VII-C', 'VII-D', 'VII-E',
-  'VIII-A', 'VIII-B', 'VIII-C', 'VIII-D', 'VIII-E',
-  'IX-A', 'IX-B', 'IX-C', 'IX-D', 'IX-E',
+  ...ROMBEL_LIST,
   'Lainnya (Ketik Manual)'
 ];
 

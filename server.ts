@@ -52,6 +52,7 @@ export interface ExamConfig {
   subject: string;
   schoolName: string;
   formUrl: string;
+  rombelFormUrls?: Record<string, string>;
   durationMinutes: number;
   maxViolationsAllowed: number;
   allowScreenStopToleranceSec: number;
@@ -63,6 +64,7 @@ let examConfig: ExamConfig = {
   subject: 'Bahasa Indonesia & Literasi',
   schoolName: 'SMP Negeri Terpadu Indonesia',
   formUrl: 'https://docs.google.com/forms/d/e/1FAIpQLScP_d300s4H-sample/viewform?embedded=true',
+  rombelFormUrls: {},
   durationMinutes: 90,
   maxViolationsAllowed: 3,
   allowScreenStopToleranceSec: 10,
@@ -347,10 +349,10 @@ app.get('/api/violations', (_req, res) => {
 function seedDemoExaminees() {
   if (students.size === 0) {
     const demoNames = [
-      { name: 'Ahmad Faiz Pratama', studentClass: 'VIII-A' },
-      { name: 'Siti Nurhaliza', studentClass: 'VIII-A' },
-      { name: 'Budi Santoso', studentClass: 'VIII-B' },
-      { name: 'Dewi Lestari', studentClass: 'VIII-C' },
+      { name: 'Ahmad Faiz Pratama', studentClass: 'Rombel VII-Abu Bakar As Shiddiq (VII Ikhwan)' },
+      { name: 'Siti Nurhaliza', studentClass: 'Rombel VII-Fatimah binti Muhammad (VII Akhwat)' },
+      { name: 'Budi Santoso', studentClass: 'Rombel VIII - Umar bin Khattab (VIII Ikhwan)' },
+      { name: 'Dewi Lestari', studentClass: 'Rombel VIII - Maryam binti Imron (VIII Akhwat A)' },
     ];
 
     demoNames.forEach((d, idx) => {

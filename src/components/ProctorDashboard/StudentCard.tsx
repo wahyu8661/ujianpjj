@@ -82,11 +82,11 @@ export const StudentCard: React.FC<StudentCardProps> = ({
           <div className="flex items-center gap-2">
             <h4 className="font-bold text-sm text-white truncate">{student.name}</h4>
           </div>
-          <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
-            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[11px] font-semibold text-indigo-300">
+          <div className="flex flex-col gap-0.5 mt-0.5 text-xs text-slate-400">
+            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-semibold text-indigo-300 truncate max-w-[240px]" title={student.studentClass}>
               {student.studentClass}
             </span>
-            <span className="truncate">{student.subject}</span>
+            <span className="text-[10px] text-slate-500 truncate">{student.subject}</span>
           </div>
         </div>
 

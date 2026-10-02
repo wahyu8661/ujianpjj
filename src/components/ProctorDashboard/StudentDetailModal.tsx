@@ -57,8 +57,8 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-extrabold text-white">{student.name}</h3>
-                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  Kelas {student.studentClass}
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  {student.studentClass}
                 </span>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${
                   student.status === 'locked'

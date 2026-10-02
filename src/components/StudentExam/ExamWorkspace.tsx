@@ -460,8 +460,8 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
         {/* Google Form Iframe Container */}
         <div className="w-full h-full flex-1 relative bg-white">
           <iframe
-            src={getEmbeddedFormUrl(config.formUrl)}
-            title="Google Form Ujian"
+            src={getEmbeddedFormUrl((config.rombelFormUrls && config.rombelFormUrls[student.studentClass]) || config.formUrl)}
+            title={`Google Form Ujian - ${student.studentClass}`}
             className="w-full h-full border-none"
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
             loading="eager"
