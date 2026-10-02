@@ -248,40 +248,46 @@ wss.on('connection', (ws: WebSocket) => {
         return;
       }
 
-      if (msg.type === 'student:heartbeat' && clientInfo.studentId) {
-        const student = students.get(clientInfo.studentId);
-        if (student) {
-          student.lastHeartbeat = Date.now();
-          if (msg.cameraActive !== undefined) student.cameraActive = msg.cameraActive;
-          if (msg.screenSharingActive !== undefined) student.screenSharingActive = msg.screenSharingActive;
-          if (msg.fullscreenActive !== undefined) student.fullscreenActive = msg.fullscreenActive;
-          
-          broadcastToProctors({
-            type: 'student:telemetry',
-            studentId: student.id,
-            lastHeartbeat: student.lastHeartbeat,
-            cameraActive: student.cameraActive,
-            screenSharingActive: student.screenSharingActive,
-            fullscreenActive: student.fullscreenActive,
-            status: student.status,
-          });
+      if (msg.type === 'student:heartbeat') {
+        const studentId = msg.studentId || clientInfo.studentId;
+        if (studentId) {
+          const student = students.get(studentId);
+          if (student) {
+            student.lastHeartbeat = Date.now();
+            if (msg.cameraActive !== undefined) student.cameraActive = msg.cameraActive;
+            if (msg.screenSharingActive !== undefined) student.screenSharingActive = msg.screenSharingActive;
+            if (msg.fullscreenActive !== undefined) student.fullscreenActive = msg.fullscreenActive;
+            
+            broadcastToProctors({
+              type: 'student:telemetry',
+              studentId: student.id,
+              lastHeartbeat: student.lastHeartbeat,
+              cameraActive: student.cameraActive,
+              screenSharingActive: student.screenSharingActive,
+              fullscreenActive: student.fullscreenActive,
+              status: student.status,
+            });
+          }
         }
         return;
       }
 
-      if (msg.type === 'student:stream_frame' && clientInfo.studentId) {
-        const student = students.get(clientInfo.studentId);
-        if (student) {
-          student.lastHeartbeat = Date.now();
-          if (msg.cameraFrame) student.cameraFrame = msg.cameraFrame;
-          if (msg.screenFrame) student.screenFrame = msg.screenFrame;
+      if (msg.type === 'student:stream_frame') {
+        const studentId = msg.studentId || clientInfo.studentId;
+        if (studentId) {
+          const student = students.get(studentId);
+          if (student) {
+            student.lastHeartbeat = Date.now();
+            if (msg.cameraFrame) student.cameraFrame = msg.cameraFrame;
+            if (msg.screenFrame) student.screenFrame = msg.screenFrame;
 
-          broadcastToProctors({
-            type: 'student:stream_frame',
-            studentId: student.id,
-            cameraFrame: msg.cameraFrame,
-            screenFrame: msg.screenFrame,
-          });
+            broadcastToProctors({
+              type: 'student:stream_frame',
+              studentId: student.id,
+              cameraFrame: msg.cameraFrame,
+              screenFrame: msg.screenFrame,
+            });
+          }
         }
         return;
       }

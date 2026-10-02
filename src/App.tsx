@@ -50,26 +50,25 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isConnected, setIsConnected] = useState(true);
 
-  // URL Hash / Path detection for proctor access (e.g. /#/pengawas or ?pengawas)
+  // URL Hash detection for proctor access (Only accessible via #pengawas or #/pengawas)
   useEffect(() => {
     const handleUrlRoute = () => {
       const hash = window.location.hash.toLowerCase();
-      const search = window.location.search.toLowerCase();
-      const path = window.location.pathname.toLowerCase();
-
-      if (hash.includes('pengawas') || search.includes('pengawas') || path.endsWith('/pengawas')) {
+      if (hash === '#pengawas' || hash === '#/pengawas') {
         if (proctorUser) {
           setCurrentView('proctor');
         } else {
           setShowProctorLoginModal(true);
         }
+      } else if (currentView === 'proctor' && !proctorUser) {
+        setCurrentView('student');
       }
     };
 
     handleUrlRoute();
     window.addEventListener('hashchange', handleUrlRoute);
     return () => window.removeEventListener('hashchange', handleUrlRoute);
-  }, [proctorUser]);
+  }, [proctorUser, currentView]);
 
   // Fetch initial config from server
   useEffect(() => {
@@ -273,19 +272,10 @@ export default function App() {
         </div>
       )}
 
-      {/* Discreet Footer (Only visible on login screen, gives teachers a clean entry point) */}
+      {/* Clean Footer (No public proctor links) */}
       {studentStep === 'login' && currentView === 'student' && (
         <footer className="py-4 text-center border-t border-slate-900 text-xs text-slate-600">
-          <div className="flex items-center justify-center gap-2">
-            <span>&copy; {config.schoolName} &bull; Ujian Daring Terpadu</span>
-            <button
-              onClick={() => setShowProctorLoginModal(true)}
-              className="text-slate-700 hover:text-slate-400 text-[11px] underline decoration-slate-800 transition-colors ml-2"
-              title="Akses Pengawas Ujian"
-            >
-              [Akses Pengawas]
-            </button>
-          </div>
+          <p>&copy; {config.schoolName} &bull; Portal Ujian Daring Terpadu</p>
         </footer>
       )}
     </div>

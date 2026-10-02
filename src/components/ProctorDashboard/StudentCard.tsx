@@ -25,7 +25,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
   onInspect,
   onQuickLock,
 }) => {
-  const [viewMode, setViewMode] = useState<'camera' | 'screen' | 'split'>('camera');
+  const [viewMode, setViewMode] = useState<'camera' | 'screen' | 'split'>('split');
 
   const getStatusBadge = () => {
     switch (student.status) {

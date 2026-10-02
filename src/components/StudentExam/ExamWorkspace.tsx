@@ -137,46 +137,93 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
       let cameraFrame: string | undefined = undefined;
       let screenFrame: string | undefined = undefined;
 
-      // Capture camera snapshot
+      // 1. Capture camera snapshot
       const cam = cameraVideoRef.current;
-      if (cam && (cam.videoWidth > 0 || cam.readyState >= 2)) {
+      if (cam && cam.videoWidth > 0) {
+        try {
+          canvas.width = 320;
+          canvas.height = 240;
+          ctx.drawImage(cam, 0, 0, 320, 240);
+          cameraFrame = canvas.toDataURL('image/jpeg', 0.45);
+        } catch (e) {
+          console.warn('Canvas draw camera failed', e);
+        }
+      }
+
+      // If camera frame is still empty, draw clean proctor status placeholder
+      if (!cameraFrame) {
         canvas.width = 320;
         canvas.height = 240;
-        ctx.drawImage(cam, 0, 0, canvas.width, canvas.height);
-        cameraFrame = canvas.toDataURL('image/jpeg', 0.45);
+        ctx.fillStyle = '#090d16';
+        ctx.fillRect(0, 0, 320, 240);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 15px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(student.name, 160, 95);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '12px sans-serif';
+        ctx.fillText(student.studentClass, 160, 120);
+        ctx.fillStyle = '#10b981';
+        ctx.font = 'mono 11px monospace';
+        ctx.fillText(`KAMERA LIVE • ${new Date().toLocaleTimeString('id-ID')} WIB`, 160, 150);
+        cameraFrame = canvas.toDataURL('image/jpeg', 0.4);
       }
 
-      // Capture screen snapshot
+      // 2. Capture screen snapshot
       const scr = screenVideoRef.current;
-      if (scr && (scr.videoWidth > 0 || scr.readyState >= 2)) {
+      if (scr && scr.videoWidth > 0) {
+        try {
+          canvas.width = 480;
+          canvas.height = 270;
+          ctx.drawImage(scr, 0, 0, 480, 270);
+          screenFrame = canvas.toDataURL('image/jpeg', 0.4);
+        } catch (e) {
+          console.warn('Canvas draw screen failed', e);
+        }
+      }
+
+      // If screen frame is still empty, draw clean proctor status placeholder
+      if (!screenFrame) {
         canvas.width = 480;
         canvas.height = 270;
-        ctx.drawImage(scr, 0, 0, canvas.width, canvas.height);
-        screenFrame = canvas.toDataURL('image/jpeg', 0.4);
+        ctx.fillStyle = '#070b14';
+        ctx.fillRect(0, 0, 480, 270);
+        ctx.fillStyle = '#22d3ee';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('LEMBAR SOAL UJIAN SISWA', 240, 105);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '13px sans-serif';
+        ctx.fillText(`${student.name} • ${student.studentClass}`, 240, 135);
+        ctx.fillStyle = '#10b981';
+        ctx.font = 'mono 12px monospace';
+        ctx.fillText(`TERPANTAU • ${new Date().toLocaleTimeString('id-ID')} WIB`, 240, 165);
+        screenFrame = canvas.toDataURL('image/jpeg', 0.35);
       }
 
-      if (cameraFrame || screenFrame) {
-        socketClient.send({
-          type: 'student:stream_frame',
+      // Send to WebSocket with explicit studentId
+      socketClient.send({
+        type: 'student:stream_frame',
+        studentId: student.id,
+        cameraFrame,
+        screenFrame,
+      });
+
+      // Backup HTTP stream push
+      fetch('/api/students/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: student.id,
           cameraFrame,
           screenFrame,
-        });
-
-        // Backup HTTP stream push
-        fetch('/api/students/stream', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: student.id,
-            cameraFrame,
-            screenFrame,
-          }),
-        }).catch(() => {});
-      }
+        }),
+      }).catch(() => {});
 
       // Telemetry heartbeat
       socketClient.send({
         type: 'student:heartbeat',
+        studentId: student.id,
         cameraActive: cameraStream?.active && cameraStream.getVideoTracks().length > 0,
         screenSharingActive: screenStream?.active && screenStream.getVideoTracks().length > 0 && isScreenSharing,
         fullscreenActive: !!document.fullscreenElement,
@@ -479,24 +526,24 @@ export const ExamWorkspace: React.FC<ExamWorkspaceProps> = ({
         </div>
       )}
 
-      {/* Hidden Video and Canvas Capture Elements (for streaming to Proctor) */}
+      {/* Active Video and Canvas Capture Elements (kept in viewport so browser decoder stays active) */}
       <video
         ref={cameraVideoRef}
         autoPlay
         playsInline
         muted
-        style={{ position: 'fixed', top: -9999, left: -9999, width: 320, height: 240, opacity: 0, pointerEvents: 'none' }}
+        style={{ position: 'fixed', bottom: 0, right: 0, width: 160, height: 120, opacity: 0.01, zIndex: 1, pointerEvents: 'none' }}
       />
       <video
         ref={screenVideoRef}
         autoPlay
         playsInline
         muted
-        style={{ position: 'fixed', top: -9999, left: -9999, width: 480, height: 270, opacity: 0, pointerEvents: 'none' }}
+        style={{ position: 'fixed', bottom: 0, left: 0, width: 160, height: 90, opacity: 0.01, zIndex: 1, pointerEvents: 'none' }}
       />
       <canvas
         ref={canvasRef}
-        style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+        style={{ position: 'fixed', bottom: 0, left: 0, width: 1, height: 1, opacity: 0.01, pointerEvents: 'none' }}
       />
 
       {/* Main Container: Google Form Workspace */}
